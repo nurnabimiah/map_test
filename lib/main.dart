@@ -1,5 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:geocoding/geocoding.dart';
+import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:get/get_core/src/get_main.dart';
@@ -107,19 +109,19 @@ class _CurrentLocationMapScreenState extends State<CurrentLocationMapScreen> {
     _markerPosition = MapLatLng(widget.latitude, widget.longitude);
     _getLocationName(widget.latitude, widget.longitude);
     print('>>>>>>>>>>>>>>>>>>>> laitude: ${widget.latitude} and longitude:  ${widget.longitude}');
+
     super.initState();
   }
 
 
   // getLocation name
-
   Future<void> _getLocationName(double latitude, double longitude) async {
     try {
-      List<Placemark> placemarks = await placemarkFromCoordinates(latitude, longitude);
-      if (placemarks.isNotEmpty) {
-        Placemark placemark = placemarks.first;
+      final response = await http.get(Uri.parse('https://nominatim.openstreetmap.org/reverse?format=json&lat=$latitude&lon=$longitude'));
+      if (response.statusCode == 200) {
+        final decodedResponse = jsonDecode(response.body);
         setState(() {
-          _selectLocationName = placemark.name ?? placemark.street ?? 'Unknown location';
+          _selectLocationName = decodedResponse['display_name'] ?? 'Unknown location';
         });
       } else {
         setState(() {
@@ -133,7 +135,6 @@ class _CurrentLocationMapScreenState extends State<CurrentLocationMapScreen> {
       });
     }
   }
-
 
 
 
@@ -152,6 +153,7 @@ class _CurrentLocationMapScreenState extends State<CurrentLocationMapScreen> {
     }
     _controller.insertMarker(0);
     print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Selected Location Name: $_selectLocationName');
+
   }
 
   @override
