@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:get/get_core/src/get_main.dart';
@@ -97,24 +98,60 @@ class _CurrentLocationMapScreenState extends State<CurrentLocationMapScreen> {
   late MapLatLng _markerPosition;
   late MapZoomPanBehavior _mapZoomPanBehavior;
   late MapTileLayerController _controller;
+  String _selectLocationName = '';
 
   @override
   void initState() {
     _controller = MapTileLayerController();
     _mapZoomPanBehavior = MapZoomPanBehavior(minZoomLevel: 9);
     _markerPosition = MapLatLng(widget.latitude, widget.longitude);
+    _getLocationName(widget.latitude, widget.longitude);
     print('>>>>>>>>>>>>>>>>>>>> laitude: ${widget.latitude} and longitude:  ${widget.longitude}');
     super.initState();
   }
 
+
+  // getLocation name
+
+  Future<void> _getLocationName(double latitude, double longitude) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(latitude, longitude);
+      if (placemarks.isNotEmpty) {
+        Placemark placemark = placemarks.first;
+        setState(() {
+          _selectLocationName = placemark.name ?? placemark.street ?? 'Unknown location';
+        });
+      } else {
+        setState(() {
+          _selectLocationName = 'Unknown location';
+        });
+      }
+    } catch (e) {
+      print('Error getting location name: $e');
+      setState(() {
+        _selectLocationName = 'Unknown location';
+      });
+    }
+  }
+
+
+
+
   void updateMarkerChange(Offset position) {
-    // We have converted the local point into latlng and inserted marker
-    // in that position.
+
     _markerPosition = _controller.pixelToLatLng(position);
+    _getLocationName(_markerPosition.latitude, _markerPosition.longitude);
+
+    // Print the latitude and longitude of the new position
+    print('New Latitude: ${_markerPosition.latitude}');
+    print('New Longitude: ${_markerPosition.longitude}');
+
+
     if (_controller.markersCount > 0) {
       _controller.clearMarkers();
     }
     _controller.insertMarker(0);
+    print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Selected Location Name: $_selectLocationName');
   }
 
   @override
