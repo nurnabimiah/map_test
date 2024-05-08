@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:get/get_core/src/get_main.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:syncfusion_flutter_maps/maps.dart';
-
-
-
-import 'home_controller.dart';
 
 
 void main() {
@@ -26,240 +23,129 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: Scaffold(
+      home:  Scaffold(
         appBar: AppBar(
           title: Text('Flutter Test'),
         ),
-
-
         body: Center(
           child: ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               // Trigger the action to show the map
-              Get.find<HomeController>().getPossition();
+              await Get.find<HomeController>().getPossition();
             },
             child: Text('Show Map'),
           ),
         ),
       ),
     );
+
   }
 }
 
+class HomeController extends GetxController {
 
-class CurrentLocationMapScreen extends StatelessWidget {
-  final double latitude, longitude;
+  Future<void> getPossition() async {
+    var status = await Permission.location.request();
+    if (status == PermissionStatus.granted) {
+      Position position = await _determinePosition();
+      double lat = position.latitude;
+      double lon = position.longitude;
+      // Navigate to the map screen directly
+      Get.to(() => CurrentLocationMapScreen(
+        latitude: lat,
+        longitude: lon,
+      ));
+    }
+  }
 
-  const CurrentLocationMapScreen({
+  Future<Position> _determinePosition() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw 'Location services are disabled.';
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        throw 'Location permissions are denied';
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      throw 'Location permissions are permanently denied, we cannot request permissions.';
+    }
+    return await Geolocator.getCurrentPosition();
+  }
+}
+
+class CurrentLocationMapScreen extends StatefulWidget {
+  final double latitude;
+  final double longitude;
+
+  CurrentLocationMapScreen({
     Key? key,
     required this.latitude,
     required this.longitude,
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Map'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.search),
-            onPressed: () {
-              showSearch(
-                context: context,
-                delegate: LocationSearchDelegate(),
-              );
-            },
-          ),
-        ],
-      ),
-      body: SfMaps(
-        layers: [
-          MapTileLayer(
-            zoomPanBehavior: MapZoomPanBehavior(),
-            initialFocalLatLng: MapLatLng(latitude, longitude),
-            initialZoomLevel: 9,
-            initialMarkersCount: 1,
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            markerBuilder: (BuildContext context, int index) {
-              return MapMarker(
-                latitude: latitude,
-                longitude: longitude,
-                child: Icon(
-                  Icons.location_on,
-                  color: Colors.red[800],
-                ),
-                size: Size(20, 20),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
+  State<CurrentLocationMapScreen> createState() => _CurrentLocationMapScreenState();
 }
 
-
-class LocationSearchDelegate extends SearchDelegate<String> {
+class _CurrentLocationMapScreenState extends State<CurrentLocationMapScreen> {
+  late MapLatLng _markerPosition;
+  late MapZoomPanBehavior _mapZoomPanBehavior;
+  late MapTileLayerController _controller;
 
   @override
-  Widget buildLeading(BuildContext context) {
-    return IconButton(
-      icon: Icon(Icons.arrow_back),
-      onPressed: () {
-        close(context, ''); // Return an empty string instead of null
-      },
-    );
+  void initState() {
+    _controller = MapTileLayerController();
+    _mapZoomPanBehavior = MapZoomPanBehavior(minZoomLevel: 9);
+    _markerPosition = MapLatLng(widget.latitude, widget.longitude);
+    print('>>>>>>>>>>>>>>>>>>>> laitude: ${widget.latitude} and longitude:  ${widget.longitude}');
+    super.initState();
+  }
+
+  void updateMarkerChange(Offset position) {
+    // We have converted the local point into latlng and inserted marker
+    // in that position.
+    _markerPosition = _controller.pixelToLatLng(position);
+    if (_controller.markersCount > 0) {
+      _controller.clearMarkers();
+    }
+    _controller.insertMarker(0);
   }
 
   @override
-  Widget buildSuggestions(BuildContext context) {
-    // Implement location search suggestions UI
-    return const Center(
-      child: Text('Search suggestions'),
-    );
-  }
-
-  @override
-  List<Widget>? buildActions(BuildContext context) {
-    return [
-      IconButton(
-        icon: Icon(Icons.clear),
-        onPressed: () {
-          query = ''; // Clear the search query
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Marker sample')),
+      body: GestureDetector(
+        onTapUp: (TapUpDetails details) {
+          updateMarkerChange(details.localPosition);
         },
+        child: SfMaps(
+          layers: [
+            MapTileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              zoomPanBehavior: _mapZoomPanBehavior,
+              initialFocalLatLng: _markerPosition,
+              controller: _controller,
+              initialMarkersCount: 1,
+              markerBuilder: (BuildContext context, int index) {
+                return MapMarker(
+                  latitude: _markerPosition.latitude,
+                  longitude: _markerPosition.longitude,
+                  child: Icon(Icons.location_on, color: Colors.red),
+                );
+              },
+            ),
+          ],
+        ),
       ),
-    ];
-  }
-
-  Future<List<Map<String, dynamic>>?> searchLocations(String query) async {
-    try {
-      List<Location> locations = await locationFromAddress(query);
-      List<Map<String, dynamic>> locationInfo = [];
-      for (var loc in locations) {
-        List<Placemark> placemarks = await placemarkFromCoordinates(
-            loc.latitude, loc.longitude);
-        String address = placemarks.isNotEmpty ? placemarks[0].name ?? '' : '';
-        locationInfo.add({
-          'name': address,
-          'latitude': loc.latitude,
-          'longitude': loc.longitude,
-        });
-      }
-      return locationInfo;
-    } catch (e) {
-      print('Error searching locations: $e');
-      return null;
-    }
-  }
-
-
-
-  // @override
-  // Widget buildResults(BuildContext context) {
-  //   return FutureBuilder<List<Map<String, dynamic>>?>(
-  //     future: searchLocations(query),
-  //     builder: (context, snapshot) {
-  //       if (snapshot.connectionState == ConnectionState.waiting) {
-  //         return Center(child: CircularProgressIndicator());
-  //       } else if (snapshot.hasError) {
-  //         return Center(child: Text('Error: ${snapshot.error}'));
-  //       } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-  //         return ListView.builder(
-  //           itemCount: snapshot.data!.length,
-  //           itemBuilder: (context, index) {
-  //
-  //             print('>>>sshgsdhjdsdkjf>>>>>>>>>>>>>>>>>>>>>${snapshot.data![index]}');
-  //
-  //             return ListTile(
-  //               title: Text(snapshot.data![index]['name']),
-  //               onTap: () {
-  //
-  //                 print('Selected Latitude: ${snapshot.data![index]['latitude']}, Longitude: ${snapshot.data![index]['longitude']}');
-  //                 // Navigate to map screen with selected latitude and longitude
-  //                 Navigator.of(context).push(
-  //                   MaterialPageRoute(
-  //                     builder: (context) =>
-  //                         CurrentLocationMapScreen(
-  //                           latitude: snapshot.data![index]['latitude'],
-  //                           longitude: snapshot.data![index]['longitude'],
-  //                         ),
-  //                   ),
-  //                 );
-  //               },
-  //             );
-  //           },
-  //         );
-  //       } else {
-  //         return Center(child: Text('No results found'));
-  //       }
-  //     },
-  //   );
-  // }
-
-  @override
-  Widget buildResults(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>?>(
-      future: searchLocations(query),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
-        } else if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-          return ListView.builder(
-            itemCount: snapshot.data!.length,
-            itemBuilder: (context, index) {
-              final location = snapshot.data![index];
-              return ListTile(
-                title: Text(location['name']),
-                onTap: () async {
-                  final latitude = location['latitude'];
-                  final longitude = location['longitude'];
-
-                  // Get the location name using reverse geocoding
-                  String placeName = await getPlaceName(latitude, longitude);
-                  print('Selected Location: $placeName');
-
-                  // Navigate to map screen with selected latitude and longitude
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => CurrentLocationMapScreen(
-                        latitude: latitude,
-                        longitude: longitude,
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          );
-        } else {
-          return Center(child: Text('No results found'));
-        }
-      },
     );
   }
-
-
-  Future<String> getPlaceName(double latitude, double longitude) async {
-    try {
-      List<Placemark> placemarks = await placemarkFromCoordinates(latitude, longitude);
-      if (placemarks.isNotEmpty) {
-        return placemarks[0].name ?? 'Unknown';
-      } else {
-        return 'Unknown';
-      }
-    } catch (e) {
-      print('Error getting place name: $e');
-      return 'Unknown';
-    }
-  }
-
-
-
-
 
 
 }
