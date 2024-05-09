@@ -107,21 +107,23 @@ class _CurrentLocationMapScreenState extends State<CurrentLocationMapScreen> {
     _controller = MapTileLayerController();
     _mapZoomPanBehavior = MapZoomPanBehavior(minZoomLevel: 9);
     _markerPosition = MapLatLng(widget.latitude, widget.longitude);
-    _getLocationName(widget.latitude, widget.longitude);
+    _getLocationDetails(widget.latitude, widget.longitude);
     print('>>>>>>>>>>>>>>>>>>>> laitude: ${widget.latitude} and longitude:  ${widget.longitude}');
 
     super.initState();
   }
 
 
-  // getLocation name
-  Future<void> _getLocationName(double latitude, double longitude) async {
+  // getLocation details
+  Future<void> _getLocationDetails(double latitude, double longitude) async {
     try {
       final response = await http.get(Uri.parse('https://nominatim.openstreetmap.org/reverse?format=json&lat=$latitude&lon=$longitude'));
       if (response.statusCode == 200) {
         final decodedResponse = jsonDecode(response.body);
         setState(() {
           _selectLocationName = decodedResponse['display_name'] ?? 'Unknown location';
+          // You can print other location details here if needed
+          print('Location Name: $_selectLocationName');
         });
       } else {
         setState(() {
@@ -129,7 +131,7 @@ class _CurrentLocationMapScreenState extends State<CurrentLocationMapScreen> {
         });
       }
     } catch (e) {
-      print('Error getting location name: $e');
+      print('Error getting location details: $e');
       setState(() {
         _selectLocationName = 'Unknown location';
       });
@@ -138,21 +140,21 @@ class _CurrentLocationMapScreenState extends State<CurrentLocationMapScreen> {
 
 
 
+
   void updateMarkerChange(Offset position) {
 
     _markerPosition = _controller.pixelToLatLng(position);
-    _getLocationName(_markerPosition.latitude, _markerPosition.longitude);
+    _getLocationDetails(_markerPosition.latitude, _markerPosition.longitude);
 
     // Print the latitude and longitude of the new position
     print('New Latitude: ${_markerPosition.latitude}');
     print('New Longitude: ${_markerPosition.longitude}');
 
-
     if (_controller.markersCount > 0) {
       _controller.clearMarkers();
     }
     _controller.insertMarker(0);
-    print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Selected Location Name: $_selectLocationName');
+
 
   }
 
